@@ -72,7 +72,29 @@ func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
 // DecodeRecordKey decodes the key and gets the tableID, handle.
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
-	return
+	k := key
+
+	if len(key) != RecordRowKeyLen || !hasTablePrefix(key) {
+		err = errInvalidKey.GenWithStack("invalid key - %q", k)
+		return 0, 0, err
+	}
+
+	key = key[len(tablePrefix):]
+	key, tableID, err = codec.DecodeInt(key)
+	if err != nil {
+		err = errInvalidKey.GenWithStack("invalid key - %q", k)
+		return 0, 0, err
+	}
+
+	if !hasRecordPrefixSep(key) {
+		err = errInvalidRecordKey.GenWithStack("invalid key - %q", k)
+		return 0, 0, err
+	}
+
+	key = key[len(recordPrefixSep):]
+	_, handle, err = codec.DecodeInt(key)
+
+	return tableID, handle, err
 }
 
 // appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
@@ -95,6 +117,27 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
+	k := key
+
+	if len(key) <= prefixLen+idLen || !hasTablePrefix(key) {
+		err = errInvalidKey.GenWithStack("invalid key - %q", k)
+		return 0, 0, nil, err
+	}
+
+	key = key[len(tablePrefix):]
+	key, tableID, err = codec.DecodeInt(key)
+	if err != nil {
+		err = errInvalidKey.GenWithStack("invalid key - %q", k)
+		return 0, 0, nil, err
+	}
+
+	if !hasIndexPrefixSep(key) {
+		err = errInvalidIndexKey.GenWithStack("invalid key - %q", k)
+		return 0, 0, nil, err
+	}
+	key = key[len(indexPrefixSep):]
+	indexValues, indexID, err = codec.DecodeInt(key)
+
 	return tableID, indexID, indexValues, nil
 }
 
@@ -160,6 +203,10 @@ func hasTablePrefix(key kv.Key) bool {
 
 func hasRecordPrefixSep(key kv.Key) bool {
 	return key[0] == recordPrefixSep[0] && key[1] == recordPrefixSep[1]
+}
+
+func hasIndexPrefixSep(key kv.Key) bool {
+	return key[0] == indexPrefixSep[0] && key[1] == indexPrefixSep[1]
 }
 
 // DecodeMetaKey decodes the key and get the meta key and meta field.
